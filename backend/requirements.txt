@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+joblib
+rdkit
+fpdf2
+pydantic
+scikit-learn
+shap
+numpy<2.0.0
