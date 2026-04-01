@@ -9,7 +9,7 @@ ToxiGuard AI takes a [SMILES](https://en.wikipedia.org/wiki/Simplified_molecular
 ## 📁 Project Structure
 
 ```
-toxiguard-ai/
+backend/
 ├── model.pkl                   # Trained ML model (auto-generated or provided)
 ├── requirements.txt            # Python dependencies
 ├── README.md
@@ -32,8 +32,8 @@ toxiguard-ai/
 ### 1. Clone the repository
 
 ```bash
-git clone <your-repo-url>
-cd toxiguard-ai
+git clone https://github.com/Yengeshwaran/Toxicity_AI.git
+cd backend
 ```
 
 ### 2. Create & activate a virtual environment
