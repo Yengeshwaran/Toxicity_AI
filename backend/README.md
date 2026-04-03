@@ -1,8 +1,8 @@
 # 🧬 ToxiGuard AI — Backend
 
-> AI-powered drug toxicity prediction system built with **FastAPI**, **RDKit**, **SHAP**, and **scikit-learn**.
+> AI-powered drug toxicity prediction system built with **FastAPI**, **RDKit**, **SHAP**, **Google Gemini AI**, and **scikit-learn**.
 
-ToxiGuard AI takes a [SMILES](https://en.wikipedia.org/wiki/Simplified_molecular-input_line-entry_system) string as input and returns a toxicity prediction, confidence score, explainable top features, a 2D molecule image, and a downloadable PDF report.
+ToxiGuard AI takes a [SMILES](https://en.wikipedia.org/wiki/Simplified_molecular-input_line-entry_system) string as input and returns a toxicity prediction, confidence score, SHAP-driven explainability, a 2D molecule image, a detailed AI-generated analysis, and a downloadable PDF report.
 
 ---
 
@@ -13,6 +13,7 @@ backend/
 ├── model.pkl                   # Trained ML model (auto-generated or provided)
 ├── requirements.txt            # Python dependencies
 ├── README.md
+├── .env                        # Environment variables (GEMINI_API_KEY)
 ├── reports/                    # Auto-generated PDF reports
 └── src/
     ├── api.py                  # FastAPI application — endpoints & server logic
@@ -23,11 +24,27 @@ backend/
 
 ---
 
+## ✨ Features
+
+| Feature | Description |
+|---|---|
+| 🔬 **Toxicity Prediction** | Classifies molecules as Toxic / Non-toxic with confidence score |
+| 🧪 **SMILES Validation** | Uses RDKit to validate molecular input |
+| 🧮 **Feature Extraction** | Extracts MolWt, LogP, TPSA, NumRotatableBonds via RDKit |
+| 📊 **SHAP Explainability** | Identifies top contributing features using SHAP TreeExplainer |
+| 🖼️ **Molecule Image** | Generates 2D molecule structure as base64-encoded PNG |
+| 🤖 **Gemini AI Analysis** | Provides detailed AI-powered toxicity explanation via Google Gemini |
+| 📄 **PDF Report** | Auto-generates a professional downloadable PDF report |
+| 🌐 **CORS Enabled** | Frontend-ready with full CORS support |
+
+---
+
 ## ⚙️ Setup & Installation
 
 ### Prerequisites
 
 - **Python 3.10+**
+- **Google Gemini API Key** (optional, for AI explanations)
 
 ### 1. Clone the repository
 
@@ -54,7 +71,17 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Generate a placeholder model (if no real model is available)
+### 4. Set up environment variables
+
+Create a `.env` file in the project root (or parent directory):
+
+```env
+GEMINI_API_KEY=your-google-gemini-api-key-here
+```
+
+> **Note:** The API works without a Gemini key — AI explanations will use a structured fallback text instead.
+
+### 5. Generate a placeholder model (if no real model is available)
 
 ```bash
 python src/generate_dummy_model.py
@@ -62,7 +89,7 @@ python src/generate_dummy_model.py
 
 This creates `model.pkl` in the project root — a basic Random Forest trained on dummy data so the API can run end-to-end.
 
-> **Note:** Replace `model.pkl` with your team's actual trained model when ready. No code changes needed.
+> Replace `model.pkl` with your team's actual trained model when ready. No code changes needed.
 
 ---
 
@@ -101,25 +128,27 @@ Predict toxicity for a given molecule.
   "confidence": 0.87,
   "top_features": ["LogP", "MolWt"],
   "molecule_image": "<base64-encoded-PNG>",
-  "report_url": "/report/download/toxiguard_report_CCO_20260331_183446.pdf"
+  "report_url": "/report/download/toxiguard_report_CCO_20260403_070000.pdf",
+  "ai_response": "The molecule CCO (ethanol) is a simple two-carbon alcohol..."
 }
 ```
 
-| Field            | Type       | Description                                      |
-|------------------|------------|--------------------------------------------------|
-| `toxicity`       | `string`   | `"Toxic"` or `"Non-toxic"`                       |
-| `confidence`     | `float`    | Model confidence score (0.0 – 1.0)               |
-| `top_features`   | `string[]` | Top SHAP-identified contributing features         |
-| `molecule_image` | `string`   | Base64-encoded PNG of the 2D molecule structure   |
-| `report_url`     | `string`   | Relative URL to download the generated PDF report |
+| Field | Type | Description |
+|---|---|---|
+| `toxicity` | `string` | `"Toxic"` or `"Non-toxic"` |
+| `confidence` | `float` | Model confidence score (0.0 – 1.0) |
+| `top_features` | `string[]` | Top SHAP-identified contributing features |
+| `molecule_image` | `string` | Base64-encoded PNG of the 2D molecule structure |
+| `report_url` | `string` | Relative URL to download the generated PDF report |
+| `ai_response` | `string` | Detailed AI-generated toxicity analysis from Gemini |
 
 **Error Responses:**
 
-| Code | Detail                        |
-|------|-------------------------------|
-| 400  | SMILES string cannot be empty |
-| 400  | Invalid SMILES string         |
-| 500  | Model is not loaded           |
+| Code | Detail |
+|---|---|
+| 400 | SMILES string cannot be empty |
+| 400 | Invalid SMILES string |
+| 500 | Model is not loaded |
 
 ---
 
@@ -130,10 +159,16 @@ Download a previously generated PDF toxicity report.
 **Example:**
 
 ```
-GET http://127.0.0.1:8000/report/download/toxiguard_report_CCO_20260331_183446.pdf
+GET http://127.0.0.1:8000/report/download/toxiguard_report_CCO_20260403_070000.pdf
 ```
 
-Returns the PDF file directly as a download.
+Returns the PDF file directly as a download. The PDF contains:
+- Input SMILES string
+- Prediction result with confidence score
+- 2D molecule structure image
+- SHAP top contributing features
+- Full molecular descriptor table
+- AI-powered toxicity analysis
 
 ---
 
@@ -144,8 +179,19 @@ Returns the PDF file directly as a download.
 3. Expand **POST /predict** → Click **Try it out**
 4. Enter a SMILES string, e.g. `{"smiles": "CCO"}`
 5. Click **Execute**
-6. Copy the `report_url` from the response
-7. Open `http://127.0.0.1:8000` + `report_url` in your browser to download the PDF
+6. View the full JSON response with prediction, AI explanation, and report URL
+7. Copy the `report_url` from the response
+8. Open `http://127.0.0.1:8000` + `report_url` in your browser to download the PDF
+
+### Example SMILES Strings for Testing
+
+| SMILES | Molecule |
+|---|---|
+| `CCO` | Ethanol |
+| `CC(=O)Oc1ccccc1C(=O)O` | Aspirin |
+| `CC(=O)NC1=CC=C(O)C=C1` | Acetaminophen |
+| `C1=CC=CC=C1` | Benzene |
+| `CC12CCC3C(C1CCC2O)CCC4=CC(=O)CCC34C` | Testosterone |
 
 ---
 
@@ -155,59 +201,67 @@ Returns the PDF file directly as a download.
 SMILES Input
     │
     ▼
-┌─────────────────────┐
-│  Input Validation    │  ← RDKit validates the SMILES string
-│  (api.py)            │
-└────────┬────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│  Feature Extraction  │  ← Extracts MolWt, LogP, TPSA, NumRotatableBonds
-│  (features.py)       │
-└────────┬────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│  Model Prediction    │  ← Loads model.pkl, returns Toxic/Non-toxic + confidence
-│  (api.py)            │
-└────────┬────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│  SHAP Explanation    │  ← Identifies top contributing molecular features
-│  (api.py)            │
-└────────┬────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│  Molecule Image      │  ← RDKit renders 2D structure as base64 PNG
-│  (api.py)            │
-└────────┬────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│  PDF Report          │  ← Generates a professional PDF with all results
-│  (report.py)         │
-└────────┬────────────┘
-         │
-         ▼
-   JSON Response
+┌──────────────────────────┐
+│  Input Validation        │  ← RDKit validates the SMILES string
+│  (api.py)                │
+└───────────┬──────────────┘
+            │
+            ▼
+┌──────────────────────────┐
+│  Feature Extraction      │  ← Extracts MolWt, LogP, TPSA, NumRotatableBonds
+│  (features.py)           │
+└───────────┬──────────────┘
+            │
+            ▼
+┌──────────────────────────┐
+│  Model Prediction        │  ← Loads model.pkl → Toxic/Non-toxic + confidence
+│  (api.py)                │
+└───────────┬──────────────┘
+            │
+            ▼
+┌──────────────────────────┐
+│  SHAP Explanation        │  ← Identifies top contributing molecular features
+│  (api.py)                │
+└───────────┬──────────────┘
+            │
+            ▼
+┌──────────────────────────┐
+│  Molecule Image          │  ← RDKit renders 2D structure as base64 PNG
+│  (api.py)                │
+└───────────┬──────────────┘
+            │
+            ▼
+┌──────────────────────────┐
+│  Gemini AI Analysis      │  ← Detailed toxicity explanation via Gemini API
+│  (api.py)                │
+└───────────┬──────────────┘
+            │
+            ▼
+┌──────────────────────────┐
+│  PDF Report Generation   │  ← Professional PDF with all results + AI analysis
+│  (report.py)             │
+└───────────┬──────────────┘
+            │
+            ▼
+     JSON Response
 ```
 
 ---
 
 ## 📦 Key Dependencies
 
-| Package        | Purpose                                    |
-|----------------|--------------------------------------------|
-| `fastapi`      | Web framework for building the REST API    |
-| `uvicorn`      | ASGI server to run FastAPI                 |
-| `rdkit`        | Chemistry toolkit for SMILES parsing & 2D rendering |
-| `scikit-learn` | ML model loading and prediction            |
-| `shap`         | Explainable AI — feature importance        |
-| `joblib`       | Model serialization/deserialization        |
-| `fpdf2`        | PDF report generation                      |
-| `pydantic`     | Request/response data validation           |
+| Package | Purpose |
+|---|---|
+| `fastapi` | Web framework for building the REST API |
+| `uvicorn` | ASGI server to run FastAPI |
+| `rdkit` | Chemistry toolkit for SMILES parsing & 2D rendering |
+| `scikit-learn` | ML model loading and prediction |
+| `shap` | Explainable AI — feature importance |
+| `google-genai` | Google Gemini AI for detailed toxicity explanations |
+| `joblib` | Model serialization/deserialization |
+| `fpdf2` | PDF report generation |
+| `pydantic` | Request/response data validation |
+| `python-dotenv` | Load environment variables from `.env` file |
 
 ---
 
@@ -224,6 +278,11 @@ const response = await fetch("http://127.0.0.1:8000/predict", {
   body: JSON.stringify({ smiles: "CCO" }),
 });
 const data = await response.json();
+
+// Display prediction
+console.log(data.toxicity);     // "Toxic" or "Non-toxic"
+console.log(data.confidence);   // 0.87
+console.log(data.ai_response);  // "The molecule CCO (ethanol)..."
 
 // Display molecule image
 const imgSrc = `data:image/png;base64,${data.molecule_image}`;
@@ -242,6 +301,14 @@ When your ML teammate provides the real trained model:
 2. Ensure their model expects the same 4 features: `MolWt`, `LogP`, `TPSA`, `NumRotatableBonds`
 3. If their model uses different features, update `src/features.py` accordingly
 4. Restart the server — no other code changes needed
+
+---
+
+## 🔑 Environment Variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `GEMINI_API_KEY` | No | Google Gemini API key for AI explanations. Without it, a fallback explanation is used. |
 
 ---
 

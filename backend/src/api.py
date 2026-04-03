@@ -4,12 +4,15 @@ import base64
 import joblib
 import numpy as np
 import shap
+from google import genai
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from rdkit import Chem
 from rdkit.Chem import Draw
+from dotenv import load_dotenv
+load_dotenv()  # this loads variables from .env
 
 # Import local modules
 from src.features import extract_features
@@ -25,6 +28,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Gemini AI Configuration ────────────────────────────────────
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+gemini_client = None
+if GEMINI_API_KEY:
+    gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
 # Variables to store loaded models
 MODEL_PATH = "model.pkl"
@@ -68,6 +77,7 @@ class PredictResponse(BaseModel):
     top_features: list[str]
     molecule_image: str
     report_url: str
+    ai_response: str
 
 
 # ── Helper functions ───────────────────────────────────────────
@@ -82,6 +92,62 @@ def get_base64_image(smiles: str) -> str:
     img.save(buffered, format="PNG")
     img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
     return img_str
+
+
+def get_gemini_explanation(
+    smiles: str,
+    toxicity: str,
+    confidence: float,
+    top_features: list[str],
+    feature_names: list[str],
+    feature_values: list[float],
+) -> str:
+    """Generate a detailed AI explanation using Google Gemini. Falls back gracefully."""
+    # Build a feature summary string
+    feature_summary = ", ".join(
+        f"{name} = {val:.4f}" for name, val in zip(feature_names, feature_values)
+    )
+
+    prompt = (
+        f"You are a pharmaceutical toxicology expert AI assistant.\n\n"
+        f"A machine learning model has analyzed the molecule with SMILES notation: {smiles}\n\n"
+        f"Results:\n"
+        f"- Prediction: {toxicity}\n"
+        f"- Confidence Score: {confidence:.2%}\n"
+        f"- Top Contributing Features (SHAP): {', '.join(top_features)}\n"
+        f"- All Extracted Features: {feature_summary}\n\n"
+        f"Please provide a detailed explanation covering:\n"
+        f"1. What this molecule likely is based on the SMILES structure\n"
+        f"2. Why the model predicted it as '{toxicity}' with {confidence:.2%} confidence\n"
+        f"3. How the top contributing features (like {', '.join(top_features)}) relate to toxicity\n"
+        f"4. What the molecular descriptors (MolWt, LogP, TPSA, NumRotatableBonds) indicate about this compound's safety profile\n"
+        f"5. Any general pharmacological concerns\n\n"
+        f"Keep the explanation informative, professional, and concise (3-5 paragraphs)."
+    )
+
+    # If no API key, return a structured fallback
+    if not GEMINI_API_KEY or gemini_client is None:
+        return (
+            f"AI explanation unavailable (no GEMINI_API_KEY set). "
+            f"The molecule '{smiles}' was predicted as {toxicity} with {confidence:.2%} confidence. "
+            f"Key features driving the prediction: {', '.join(top_features)}. "
+            f"Molecular descriptors: {feature_summary}."
+        )
+
+    try:
+        response = gemini_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+        )
+        return response.text.strip()
+    except Exception as e:
+        print(f"Gemini API call failed: {e}")
+        return (
+            f"AI explanation could not be generated (API error). "
+            f"The molecule '{smiles}' was predicted as {toxicity} with {confidence:.2%} confidence. "
+            f"Key features driving the prediction: {', '.join(top_features)}. "
+            f"Molecular descriptors: {feature_summary}."
+        )
 
 
 # ── Endpoints ──────────────────────────────────────────────────
@@ -144,7 +210,17 @@ async def predict_toxicity(request: PredictRequest):
     # 4. Molecule Image generation (base64 for frontend)
     molecule_image = get_base64_image(smiles)
 
-    # 5. PDF Report generation
+    # 5. Gemini AI detailed explanation
+    ai_response = get_gemini_explanation(
+        smiles=smiles,
+        toxicity=toxicity,
+        confidence=confidence,
+        top_features=top_features,
+        feature_names=feature_names,
+        feature_values=feature_values,
+    )
+
+    # 6. PDF Report generation
     report_filename = generate_pdf_report(
         smiles=smiles,
         toxicity=toxicity,
@@ -152,6 +228,7 @@ async def predict_toxicity(request: PredictRequest):
         top_features=top_features,
         feature_values=feature_values,
         feature_names=feature_names,
+        ai_explanation=ai_response,
     )
     report_url = f"/report/download/{report_filename}"
 
@@ -161,6 +238,7 @@ async def predict_toxicity(request: PredictRequest):
         top_features=top_features,
         molecule_image=molecule_image,
         report_url=report_url,
+        ai_response=ai_response,
     )
 
 
