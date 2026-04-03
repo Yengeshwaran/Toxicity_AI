@@ -31,6 +31,7 @@ def generate_pdf_report(
     top_features: list[str],
     feature_values: list[float],
     feature_names: list[str],
+    ai_explanation: str = "",
 ) -> str:
     """
     Generate a professional PDF report for a toxicity prediction and return the filename.
@@ -42,6 +43,7 @@ def generate_pdf_report(
       - 2D molecule structure image rendered via RDKit
       - SHAP top contributing features
       - Full feature table
+      - AI-generated toxicity analysis (Gemini)
     """
 
     pdf = FPDF()
@@ -136,6 +138,24 @@ def generate_pdf_report(
         pdf.cell(95, 7, str(name), border=1, align="C")
         pdf.cell(95, 7, f"{val:.4f}", border=1, align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(6)
+
+    # ── AI Analysis ────────────────────────────────────────
+    if ai_explanation:
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.set_text_color(30, 60, 120)
+        pdf.cell(0, 8, "AI-Powered Toxicity Analysis", new_x="LMARGIN", new_y="NEXT")
+
+        pdf.set_draw_color(30, 60, 120)
+        pdf.set_line_width(0.3)
+        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+        pdf.ln(3)
+
+        pdf.set_font("Helvetica", "", 10)
+        pdf.set_text_color(40, 40, 40)
+        # Encode to latin-1 safe text for fpdf2
+        safe_text = ai_explanation.encode("latin-1", errors="replace").decode("latin-1")
+        pdf.multi_cell(0, 5.5, safe_text)
+        pdf.ln(6)
 
     # ── Footer ─────────────────────────────────────────────
     pdf.set_font("Helvetica", "I", 8)
